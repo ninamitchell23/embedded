@@ -52,7 +52,7 @@ void loop() {
     if (incomingData.startsWith("Temp:")) {
       data_temp = incomingData + "*c"; // Add temperature unit
     } else if (incomingData.startsWith("TB:")) {
-      data_tb = incomingData + " NTU"; // Add turbidity unit
+      data_tb = incomingData + "NTU"; // Add turbidity unit
     }
 
     incomingData = ""; // Clear incoming data buffer

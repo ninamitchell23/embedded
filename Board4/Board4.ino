@@ -43,6 +43,8 @@
 // Thresholds for NTU and temperature
 const float NTU_THRESHOLD = 50.0;    //  threshold for turbidity
 const float TEMP_THRESHOLD = 30.0;   // threshold for temperature
+float last_temperature = 0;
+float last_turbidity=0;
 
 String incomingData2 = ""; 
 String incomingData3 = ""; // From b3 (9600 baud, for temperature)
@@ -84,10 +86,20 @@ void setup() {
 }
 
 
-void receiveEvent(int num){
+void receiveEvent(int bytes){
 
-     incomingData2 = Wire.read();
 
+   byte floatBytes[sizeof(float)];
+
+  for (int i = 0; i < sizeof(float); i++) {
+    if (Wire.available()) {
+      floatBytes[i] = Wire.read(); // Read each byte
+    }
+  }
+
+ 
+  incomingData2 = String(*((float*)floatBytes)); // Reconstruct float from byte array
+  
       dataReady_board_2 = true;
 
 }
@@ -146,14 +158,15 @@ void readBoard_3_Data() {
 }
 
 void processBoard_2_Data() {
-  long turbidity = incomingData2.toFloat();
+  float turbidity = incomingData2.toFloat();
   String output = "TB:" + String(turbidity);
-  Serial.println(output);
-
+  
+   Serial.println(output);
+  
   if (turbidity > NTU_THRESHOLD) {
     activateAlert("TB:ALARM");
     EEPROM.write(0, 1); // Save NTU alert to EEPROM
-     Serial.println("TB: ALERT");
+    //  Serial.println("TB:ALERT");
   }
 
   incomingData2 = "";
@@ -163,11 +176,15 @@ void processBoard_2_Data() {
 void processBoard_3_Data() {
   float temperature = incomingData3.toFloat();
   String output = "Temp:" + String(temperature);
+  if (last_temperature != temperature){
+   last_temperature=temperature;
   Serial.println(output);
+  }
+  
   if (temperature > TEMP_THRESHOLD) {
     activateAlert("Temp:ALARM");
     EEPROM.write(1, 1); // Save temperature alert to EEPROM
-    Serial.println("Temp:ALERT");
+    
   }
   incomingData3 = "";
   dataReady_board_3 = false;
