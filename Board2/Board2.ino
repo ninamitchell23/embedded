@@ -1,75 +1,76 @@
-#include <Wire.h>
+// Include the Wire library for I2C communication
+#include<Wire.h>
 
-#define SensorPin 0 // Connect the LM35 temperature sensor output to pin A0 (Analog 0). This pin is mapped to ADC channel 0.
+// Define the analog sensor pin
+int sensorPin = A0;  
 
-unsigned long avgValue;    // Pointer to store the average value of the sensor feedback
-float voltage, ntu; // Variables to store the voltage and calculated temperature
-int buf[10], temp;         // Buffer to store sensor readings and temporary variable
-unsigned long previousMillis = 0; // Variable to store previous time for sampling interval
-const unsigned long samplingInterval = 100; // Sampling interval in milliseconds
-int analog_value = 0;      // Variable to store the current analog reading
+// Define the digital pin for additional functionality
+int digitalPin = 8;  
 
+// Variable to store the raw sensor value
+int sensorValue = 0;  
 
-void setupADC() {
-  // Set reference voltage to AVcc and select channel 0 (A0 initially)
-  ADMUX = (1 << REFS0); // Reference voltage = AVcc, channel = 0 by default
-  
-  // Enable ADC and set prescaler to 128 for 16MHz Arduino boards (125 kHz ADC clock)
-  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
-}
+// Variables to store calculated voltage and turbidity
+float voltage = 0;
+float turbidity = 0;
 
-
-void setupSerial() {
-  Serial.begin(115200); // Initialize Serial communication for debugging
-}
-
-void sendSerialWithID(uint16_t value) {
-  Wire.beginTransmission(1); // Begin I²C transmission to slave device at address 1
-  Wire.write(value);
-  Wire.endTransmission();    // End transmission
-}
-
+// Setup function to initialize serial communication and I2C
 void setup() {
-  Wire.begin();     // Initialize I²C communication
-  setupADC();       // Initialize ADC
-  setupSerial();    // Initialize Serial communication (optional)
+  
+  Serial.begin(115200);  // Begin serial communication at 115200 baud rate
+  Wire.begin(); // Initialize the I2C communication
 }
 
-
-// Function to read analog values directly from a specific ADC channel
-uint16_t analogReadDirect(uint8_t channel) {
-  ADMUX = (ADMUX & 0xF8) | (channel & 0x07); // Select the ADC channel
-  delayMicroseconds(10); // Stabilize ADC
-  ADCSRA |= (1 << ADSC); // Start ADC conversion
-  while (ADCSRA & (1 << ADSC)); // Wait for conversion to finish
-  return ADC; // Return the 10-bit ADC result
+// Function to send a float value with an ID over I2C
+void sendSerialWithID(float value) {
+   float valueToSend = value; // Prepare the value to send
+  
+  Wire.beginTransmission(1); // Address of the slave device
+  byte* floatBytes = (byte*)&valueToSend; // Cast float to byte array
+  
+  for (int i = 0; i < sizeof(float); i++) {
+    Wire.write(floatBytes[i]); // Send each byte of the float value
+  }
+  Wire.endTransmission(); // End the I2C transmission
+  
+  // Configure ADC for analog to digital conversion
+  ADMUX = B01000000;   // Use AVcc as reference, select channel A0
+  ADCSRA = B10000111;  // Enable ADC, set prescaler to 128
 }
+
 
 void loop() {
-  unsigned long currentMillis = millis(); // Get the current system time
+  
+ // Start ADC conversion
+  ADCSRA |= B01000000;
 
-  if (currentMillis - previousMillis >= samplingInterval) {
-    previousMillis = currentMillis; // Update the previousMillis for timing
+  // Wait for conversion to complete
+  while (bit_is_set(ADCSRA, ADSC));
 
-    // Collect 10 samples for averaging
-    for (int i = 0; i < 10; i++) {
-      analog_value = analogReadDirect(SensorPin); // Read the sensor value from pin A0
-      delay(10); // Delay for stabilization between reads
-    }
-
-
-
-     // Convert raw ADC value to voltage (assuming 5V system)
-    long voltage = analog_value * (5.0 / 1023.0);
-    
-    // Calculate turbidity in NTU (example calibration formula)
-    long turbidity = -1333.33 * voltage + 5333.33;
-    // Send turbidity value over I²C
-    sendSerialWithID(turbidity);
-    Serial.println(turbidity);
-
+  // Read ADC result (combine ADCL and ADCH)
+  int val = ADCL | (ADCH << 8);
+  
+   // Convert ADC value to voltage
+  voltage = (val / 1023.0) * 5.0; 
+  turbidity = -1333.33 * voltage + 5333.33;
+  if (turbidity < 0) {
+    turbidity = 0;
   }
 
-  delay(1000);
-}
+  if (true) {
+    Serial.print("Analog Voltage: ");
+    Serial.print(voltage);
+    Serial.print(" V, ");
+    Serial.print("Turbidity: ");
+    Serial.print(turbidity);
+    Serial.println(" NTU");
+    sendSerialWithID(turbidity);
 
+ 
+  }
+
+
+  
+
+  delay(100); 
+}
